@@ -1,17 +1,3 @@
-#!/usr/bin/env bash
-# =============================================================================
-# Ejecuta los 7 escenarios de evaluación de la Tarea 2.
-#
-# Cada escenario:
-#   1. Limpia los logs de métricas (metrics_log.csv / backlog_log.csv).
-#   2. Levanta el stack con la configuración del escenario.
-#   3. Espera a que el traffic_generator termine.
-#   4. Guarda los CSV resultantes con un nombre propio en data/resultados/.
-#
-# Uso:   ./scripts/run_scenarios.sh <numero|all>
-# Ej.:   ./scripts/run_scenarios.sh 3
-#        ./scripts/run_scenarios.sh all
-# =============================================================================
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
