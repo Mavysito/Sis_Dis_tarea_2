@@ -1,4 +1,4 @@
-# Tarea 2 — Procesamiento y Fallback con Apache Kafka
+# Tarea 2
 
 Plataforma distribuida para el análisis de consultas geoespaciales sobre el dataset de
 edificios de Santiago (Google Open Buildings). Esta segunda entrega evoluciona la
@@ -128,4 +128,3 @@ Los resultados quedan en `data/resultados/` (CSV por escenario), el resumen en
 
 - El sistema está pensado para Docker; los puertos `8000` (generador), `8001` (métricas),
   `6379` (Redis) y `9092` (Kafka) quedan expuestos para inspección.
-- Detalle de las decisiones de diseño en [`CAMBIOS_TAREA2.md`](CAMBIOS_TAREA2.md).
