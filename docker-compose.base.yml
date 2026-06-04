@@ -1,0 +1,44 @@
+# Escenario 1 — Sistema Base (arquitectura síncrona original de la Tarea 1).
+# Sin Kafka: el Generador de Tráfico llama directamente por HTTP al Generador de
+# Respuestas (que integra la caché Redis). Sirve de línea base para comparar
+# contra la arquitectura basada en colas.
+#
+# Uso:  docker compose -f docker-compose.base.yml up --build
+services:
+  cache:
+    image: redis:7-alpine
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    networks:
+      - net
+
+  response_generator:
+    build: ./base_system/response_generator
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_HOST=cache
+    volumes:
+      - ./data:/app/data
+    networks:
+      - net
+
+  metrics:
+    build: ./base_system/metrics
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./data:/app/data
+    networks:
+      - net
+
+  traffic_generator:
+    build: ./base_system/traffic_generator
+    depends_on:
+      - response_generator
+      - metrics
+    networks:
+      - net
+
+networks:
+  net:
+    driver: bridge

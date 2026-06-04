@@ -1,0 +1,130 @@
+services:
+  # ----------------------------------------------------------------------
+  # Apache Kafka en modo KRaft (sin Zookeeper): un solo contenedor, toda la
+  # configuración por variables de entorno.
+  # ----------------------------------------------------------------------
+  kafka:
+    image: apache/kafka:3.8.0
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      CLUSTER_ID: "kafka-tarea2-cluster-1"
+    networks:
+      - net
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  # Contenedor efímero: crea los tópicos y termina.
+  kafka-init:
+    image: apache/kafka:3.8.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      "
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic queries --partitions 24 --replication-factor 1
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic queries.retry --partitions 24 --replication-factor 1
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic queries.dlq --partitions 1 --replication-factor 1
+      echo 'Topicos creados:'
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
+      "
+    networks:
+      - net
+
+  # ----------------------------------------------------------------------
+  # Sistema Caché (baseline acotado: 256mb + LRU).
+  # ----------------------------------------------------------------------
+  cache:
+    image: redis:7-alpine
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6379:6379"
+    networks:
+      - net
+
+  # Generador de Respuestas: SOLO cálculo (la caché vive en el consumidor).
+  response_generator:
+    build: ./response_generator
+    ports:
+      - "8000:8000"
+    environment:
+      - FAILURE_RATE=${FAILURE_RATE:-0.0}
+      - ARTIFICIAL_LATENCY_MS=${ARTIFICIAL_LATENCY_MS:-0.0}
+    volumes:
+      - ./data:/app/data
+    networks:
+      - net
+
+  # Sistema de Métricas + monitor de backlog.
+  metrics:
+    build: ./metrics
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8001:8001"
+    environment:
+      - KAFKA_BOOTSTRAP=kafka:9092
+      - GROUP_ID=query-workers
+    volumes:
+      - ./data:/app/data
+    networks:
+      - net
+
+  # Consumidores Kafka (escalables: docker compose up --scale consumer=N).
+  consumer:
+    build: ./consumer
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      - KAFKA_BOOTSTRAP=kafka:9092
+      - GROUP_ID=query-workers
+      - MAX_RETRIES=${MAX_RETRIES:-3}
+      - RETRY_BACKOFF=${RETRY_BACKOFF:-0.5}
+      - CACHE_TTL=${CACHE_TTL:-90}
+      - PROCESS_DELAY_MS=${PROCESS_DELAY_MS:-0}
+      - REDIS_HOST=cache
+      - GENERATOR_URL=http://response_generator:8000
+      - METRICS_URL=http://metrics:8001/log
+    networks:
+      - net
+
+  # Generador de Tráfico (Kafka Producer).
+  traffic_generator:
+    build: ./traffic_generator
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      - KAFKA_BOOTSTRAP=kafka:9092
+      - DIST=${DIST:-uniform}
+      - RATE=${RATE:-10}
+      - DURATION=${DURATION:-300}
+      - SPIKE=${SPIKE:-0}
+      - SPIKE_RATE=${SPIKE_RATE:-100}
+      - SPIKE_DURATION=${SPIKE_DURATION:-20}
+    networks:
+      - net
+
+networks:
+  net:
+    driver: bridge
