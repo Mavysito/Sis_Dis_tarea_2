@@ -1,20 +1,3 @@
-#!/usr/bin/env bash
-# =============================================================================
-# Experimento de ESCALADO HORIZONTAL de consumidores (req. 5.2).
-#
-# Corre la misma carga saturante con distinta cantidad de consumidores para
-# medir el impacto de agregar consumidores sobre throughput, latencia y backlog.
-#
-# Para que el efecto sea visible:
-#   - El tópico tiene 24 particiones (admite hasta 24 consumidores activos).
-#   - RATE alto + PROCESS_DELAY_MS > 0  ->  el consumidor es el cuello de botella:
-#     1 consumidor no da abasto y se acumula backlog; más consumidores drenan
-#     más rápido y bajan la latencia, hasta cubrir la tasa ofrecida.
-#
-# Uso:    ./scripts/scaling_test.sh
-# Config: variables de entorno (con sus valores por defecto):
-#   CONSUMER_COUNTS="1 3 6 10 20"   DURATION=300   RATE=150   PROCESS_DELAY_MS=40
-# =============================================================================
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
